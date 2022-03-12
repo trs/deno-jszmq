@@ -1,21 +1,20 @@
-import { EventEmitter } from "https://deno.land/std@0.108.0/node/events.ts";
 import { SocketOptions } from "./SocketOptions.ts";
 import { WebSocketEndpoint as Endpoint } from "./WebSocketEndpoint.ts";
 import { Listener } from "./Types.ts";
 import { HttpHandler } from "./HttpHandler.ts";
 
 export class WebSocketListener<Data extends Record<string, unknown>>
-  extends EventEmitter
-  implements Listener {
+  implements Listener
+{
   public readonly path: string | undefined;
   #endPoint?: Endpoint<Data>;
+  #eventTarget = new EventTarget();
 
   public constructor(
     public address: string,
     private httpServer: HttpHandler<Data>,
     private options: SocketOptions,
   ) {
-    super();
     this.onConnection = this.onConnection.bind(this);
 
     if (!Deno) {
@@ -30,7 +29,20 @@ export class WebSocketListener<Data extends Record<string, unknown>>
 
   public onConnection(connection: WebSocket, data: Data): void {
     this.#endPoint = new Endpoint(connection, this.options, data);
-    this.emit("attach", this.#endPoint);
+    this.#eventTarget.dispatchEvent(new CustomEvent('attach', {detail: this.#endPoint}));
+  }
+
+  public removeListener(
+    event: string,
+    listener: EventListenerOrEventListenerObject | null,
+  ) {
+    this.#eventTarget.removeEventListener(event, listener);
+    return this;
+  }
+
+  public on(event: string, listener: EventListenerOrEventListenerObject) {
+    this.#eventTarget.addEventListener(event, listener);
+    return this;
   }
 
   public close(): void {

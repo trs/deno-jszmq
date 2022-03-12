@@ -1,17 +1,17 @@
 import { SocketBase } from "./SocketBase.ts";
-import { Buffer, Endpoint, Msg } from "./Types.ts";
+import { Endpoint, Msg } from "./Types.ts";
 
 export class Pair extends SocketBase {
   #endpoint?: Endpoint;
   #pending: Msg[] = [];
 
-  protected attachEndpoint(endpoint: Endpoint): void {
+  protected attachEndpoint(event: CustomEvent<Endpoint>): void {
     if (this.#endpoint) {
-      endpoint.close();
+      event.detail.close();
       return;
     }
 
-    this.#endpoint = endpoint;
+    this.#endpoint = event.detail;
 
     for (;;) {
       const msg = this.#pending.shift();
@@ -19,19 +19,20 @@ export class Pair extends SocketBase {
         break;
       }
 
-      if (!endpoint.send(msg)) {
+      if (!event.detail.send(msg)) {
         break;
       }
     }
   }
 
-  protected endpointTerminated(endpoint: Endpoint): void {
-    if (endpoint === this.#endpoint) {
+  protected endpointTerminated(event: CustomEvent<Endpoint>): void {
+    if (event.detail === this.#endpoint) {
       this.#endpoint = undefined;
     }
   }
 
-  protected xrecv(endpoint: Endpoint, ...frames: Buffer[]): void {
+  protected xrecv(event: CustomEvent<[Endpoint, ...Uint8Array[]]>): void {
+    const [endpoint, ...frames] = event.detail;
     if (endpoint === this.#endpoint) {
       this.emit("message", endpoint, ...frames);
     }

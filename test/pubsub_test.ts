@@ -16,6 +16,7 @@ Deno.test({
     let complete = false;
     let timer: number | undefined;
     const httpServer = new DenoHttpServer(url);
+    const decoder = new TextDecoder();
 
     const pub = new XPub();
     pub.bind(httpServer);
@@ -26,7 +27,7 @@ Deno.test({
 
     const sub = new Sub();
     sub.addListener("message", (_endpoint: Endpoint, topic: Uint8Array) => {
-      assertStrictEquals(topic.toString(), "AAA");
+      assertStrictEquals(decoder.decode(topic), "AAA");
       complete = true;
       ensureCompleted();
     });
@@ -58,6 +59,7 @@ Deno.test({
     let first = true;
     let timer: number | undefined;
     const httpServer = new DenoHttpServer(url);
+    const decoder = new TextDecoder();
 
     const pub = new XPub();
     pub.bind(httpServer);
@@ -68,7 +70,7 @@ Deno.test({
     const sub = new Sub();
     sub.addListener("message", (_endpoint: Endpoint, topic1: Uint8Array) => {
       if (first) {
-        assertStrictEquals(topic1.toString(), "A");
+        assertStrictEquals(decoder.decode(topic1), "A");
         first = false;
       }
       sub.unsubscribe("A");
@@ -76,7 +78,7 @@ Deno.test({
       pub.send("B");
 
       sub.addListener("message", (_endpoint: Endpoint, topic2: Uint8Array) => {
-        assertStrictEquals(topic2.toString(), "B");
+        assertStrictEquals(decoder.decode(topic2), "B");
         complete = true;
         ensureCompleted();
       });

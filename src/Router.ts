@@ -1,6 +1,6 @@
 import { SocketBase } from "./SocketBase.ts";
 import { includes, pull } from "https://cdn.skypack.dev/lodash";
-import { Buffer, Endpoint, Msg } from "./Types.ts";
+import { Endpoint, Msg, isFrameUint8Array } from "./Types.ts";
 
 export class Router extends SocketBase {
   #anonymousPipes: Endpoint[] = [];
@@ -12,35 +12,34 @@ export class Router extends SocketBase {
     this.options.recvRoutingId = true;
   }
 
-  protected attachEndpoint(endpoint: Endpoint): void {
-    this.#anonymousPipes.push(endpoint);
+  protected attachEndpoint(event: CustomEvent<Endpoint>): void {
+    this.#anonymousPipes.push(event.detail);
   }
 
-  protected endpointTerminated(endpoint: Endpoint): void {
-    this.#pipes.delete(endpoint.routingKeyString);
-    pull(this.#anonymousPipes, endpoint);
+  protected endpointTerminated(event: CustomEvent<Endpoint>): void {
+    this.#pipes.delete(event.detail.routingKeyString);
+    pull(this.#anonymousPipes, event.detail);
   }
 
-  protected xrecv(endpoint: Endpoint, ...msg: Buffer[]): void {
+  protected xrecv(event: CustomEvent<[Endpoint, ...Uint8Array[]]>): void {
+    const [endpoint, ...msg] = event.detail;
     // For anonymous pipe, the first message is the identity
     if (includes(this.#anonymousPipes, endpoint)) {
       pull(this.#anonymousPipes, endpoint);
 
       const routingKey = msg[0];
       if (routingKey.length > 0) {
-        endpoint.routingKey = Buffer.concat([
-          new Uint8Array([0]),
-          routingKey,
-        ]);
+
+        endpoint.routingKey = new Uint8Array([0, ...routingKey]);
       } else {
-        const buffer = Buffer.alloc(5);
-        buffer.writeUInt8(1, 0);
-        buffer.writeInt32BE(this.nextId, 1);
+        const buffer = new Uint8Array(5);
+        buffer.set([1], 0);
+        buffer.set([this.nextId], 1);
         endpoint.routingKey = buffer;
         this.nextId++;
       }
 
-      endpoint.routingKeyString = endpoint.routingKey.toString("hex");
+      endpoint.routingKeyString = endpoint.routingKey.toString();
       this.#pipes.set(endpoint.routingKeyString, endpoint);
 
       return;
@@ -49,7 +48,7 @@ export class Router extends SocketBase {
     this.xxrecv(endpoint, endpoint.routingKey, ...msg);
   }
 
-  protected xxrecv(endpoint: Endpoint, ...msg: Buffer[]): void {
+  protected xxrecv(endpoint: Endpoint, ...msg: Uint8Array[]): void {
     this.emit("message", endpoint, ...msg);
   }
 
@@ -59,11 +58,11 @@ export class Router extends SocketBase {
     }
 
     const routingKey = msg.shift();
-    if (!Buffer.isBuffer(routingKey)) {
+    if (routingKey == null || !isFrameUint8Array(routingKey)) {
       throw new Error("routing key must be a buffer");
     }
 
-    const endpoint = this.#pipes.get(routingKey.toString("hex"));
+    const endpoint = this.#pipes.get(routingKey.toString());
     if (!endpoint) {
       return; // TODO: use mandatory option, if true throw exception here
     }

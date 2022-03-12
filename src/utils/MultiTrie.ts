@@ -1,10 +1,10 @@
 import { assert } from "https://deno.land/std@0.108.0/testing/asserts.ts";
-import { Buffer, Endpoint } from "../Types.ts";
+import { Endpoint } from "../Types.ts";
 import { copy, resize } from "./array.ts";
 
 type RemovedCallback = (
   endpoint: Endpoint,
-  buffer: Buffer,
+  buffer: Uint8Array,
   bufferSize: number,
 ) => void;
 
@@ -29,7 +29,7 @@ export class MultiTrie {
   }
 
   public add(
-    prefix: Buffer,
+    prefix: Uint8Array,
     start: number,
     size: number,
     endpoint: Endpoint,
@@ -38,7 +38,7 @@ export class MultiTrie {
   }
 
   private addHelper(
-    prefix: Buffer,
+    prefix: Uint8Array,
     start: number,
     size: number,
     endpoint: Endpoint,
@@ -56,7 +56,7 @@ export class MultiTrie {
       return result;
     }
 
-    const currentCharacter = prefix.readUInt8(start);
+    const currentCharacter = prefix.at(start)!;
 
     if (
       currentCharacter < this.#minCharacter ||
@@ -108,12 +108,12 @@ export class MultiTrie {
   }
 
   public removeEndpoint(endpoint: Endpoint, func: RemovedCallback): boolean {
-    return this.removeEndpointHelper(endpoint, Buffer.alloc(0), 0, 0, func);
+    return this.removeEndpointHelper(endpoint, new Uint8Array(0), 0, 0, func);
   }
 
   private removeEndpointHelper(
     endpoint: Endpoint,
-    buffer: Buffer,
+    buffer: Uint8Array,
     bufferSize: number,
     maxBufferSize: number,
     func: RemovedCallback,
@@ -131,8 +131,10 @@ export class MultiTrie {
     // Adjust the buffer.
     if (bufferSize >= maxBufferSize) {
       maxBufferSize = bufferSize + 256;
-      const newBuffer = Buffer.alloc(maxBufferSize, 0);
-      buffer.copy(newBuffer);
+
+      const newBuffer = new Uint8Array(maxBufferSize);
+      newBuffer.set(buffer);
+
       buffer = newBuffer;
     }
 
@@ -143,7 +145,7 @@ export class MultiTrie {
 
     // If there's one subnode (optimisation).
     if (this.#count === 1) {
-      buffer.writeUInt8(this.#minCharacter, bufferSize);
+      buffer.set(new Uint8Array(new Int32Array([this.#minCharacter]).buffer), bufferSize);
       bufferSize++;
       this.#next[0]?.removeEndpointHelper(
         endpoint,
@@ -176,7 +178,7 @@ export class MultiTrie {
       currentCharacter !== this.#count;
       currentCharacter++
     ) {
-      buffer.writeUInt8(this.#minCharacter + currentCharacter, bufferSize);
+      buffer.set(new Uint8Array(new Int32Array([this.#minCharacter + currentCharacter]).buffer), bufferSize);
 
       const next = this.#next[currentCharacter];
       if (next) {
@@ -248,7 +250,7 @@ export class MultiTrie {
   }
 
   public remove(
-    prefix: Buffer,
+    prefix: Uint8Array,
     start: number,
     size: number,
     endpoint: Endpoint,
@@ -264,7 +266,7 @@ export class MultiTrie {
       return !this.#endpoints;
     }
 
-    const currentCharacter = prefix.readUInt8(start);
+    const currentCharacter = prefix.at(start)!;
     if (
       this.#count === 0 ||
       currentCharacter < this.#minCharacter ||
@@ -342,7 +344,7 @@ export class MultiTrie {
   }
 
   public match(
-    data: Buffer,
+    data: Uint8Array,
     offset: number,
     size: number,
     func: MatchCallback,
@@ -367,7 +369,7 @@ export class MultiTrie {
         break;
       }
 
-      const c = data.readUInt8(index);
+      const c = data.at(index)!;
       // If there's one subnode (optimization).
       if (current.#count === 1) {
         if (c !== current.#minCharacter) {

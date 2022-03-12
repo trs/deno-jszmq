@@ -1,18 +1,17 @@
-import { EventEmitter } from "https://deno.land/std@0.108.0/node/events.ts";
 import { SocketOptions } from "./SocketOptions.ts";
 import { find, pull } from "https://cdn.skypack.dev/lodash";
-import { Buffer, Endpoint, Frame, Listener, Msg } from "./Types.ts";
+import { Endpoint, Frame, Listener, Msg, isFrameUint8Array } from "./Types.ts";
 import { WebSocketListener } from "./WebSocketListener.ts";
 import { WebSocketEndpoint } from "./WebSocketEndpoint.ts";
 import { HttpHandler } from "./HttpHandler.ts";
 
-export class SocketBase extends EventEmitter {
+export class SocketBase {
   #endpoints: Endpoint[] = [];
   #binds: Listener[] = [];
+  #eventTarget = new EventTarget();
   public readonly options = new SocketOptions();
 
   public constructor() {
-    super();
     this.bindAttachEndpoint = this.bindAttachEndpoint.bind(this);
     this.bindEndpointTerminated = this.bindEndpointTerminated.bind(this);
     this.attachEndpoint = this.attachEndpoint.bind(this);
@@ -24,14 +23,14 @@ export class SocketBase extends EventEmitter {
   public connect(address: string): void {
     if (address.startsWith("ws://") || address.startsWith("wss://")) {
       const endpoint = new WebSocketEndpoint(address, this.options, {});
-      endpoint.on("attach", this.attachEndpoint);
-      endpoint.on("terminated", this.endpointTerminated);
-      endpoint.on("message", this.xrecv);
-      endpoint.on("hiccuped", this.hiccuped);
+      endpoint.on("attach", this.attachEndpoint as EventListener);
+      endpoint.on("terminated", this.endpointTerminated as EventListener);
+      endpoint.on("message", this.xrecv as EventListener);
+      endpoint.on("hiccuped", this.hiccuped as EventListener);
       this.#endpoints.push(endpoint);
 
       if (!this.options.immediate) {
-        this.attachEndpoint(endpoint);
+        this.attachEndpoint({detail: endpoint} as CustomEvent);
       }
     } else {
       throw new Error("unsupported transport");
@@ -60,7 +59,7 @@ export class SocketBase extends EventEmitter {
     address: string = server.address,
   ): void {
     const listener = new WebSocketListener(address, server, this.options);
-    listener.on("attach", this.bindAttachEndpoint);
+    listener.on("attach", this.bindAttachEndpoint as EventListener);
     this.#binds.push(listener);
   }
 
@@ -79,7 +78,7 @@ export class SocketBase extends EventEmitter {
 
   public close(): void {
     this.#binds.forEach((listener) => {
-      listener.removeListener("attach", this.attachEndpoint);
+      listener.removeListener("attach", this.attachEndpoint as EventListener);
       listener.close();
     });
 
@@ -92,17 +91,29 @@ export class SocketBase extends EventEmitter {
       endpoint.removeListener("hiccuped", this.hiccuped);
       endpoint.close();
       pull(this.#endpoints, endpoint);
-      this.endpointTerminated(endpoint);
+      this.endpointTerminated({detail: endpoint} as CustomEvent);
     });
   }
 
-  public emit(
-    eventName: string | symbol,
+  public emit<T extends unknown[]>(
+    eventName: string,
     endpoint: Endpoint,
-    // deno-lint-ignore no-explicit-any
-    ...args: any[]
+    ...args: T
   ): boolean {
-    return super.emit(eventName, endpoint, ...args);
+    return this.#eventTarget.dispatchEvent(new CustomEvent(eventName, {
+      detail: [endpoint, ...args]
+    }))
+  }
+
+  public addListener<T extends unknown[]>(
+    eventName: string,
+    listener: (endpoint: Endpoint,
+    ...args: T) => void
+  ): void {
+    this.#eventTarget.addEventListener(eventName, ((e: CustomEvent<[Endpoint, ...T]>) => {
+      const [endpoint, ...args] = e.detail;
+      return listener(endpoint, ...args);
+    }) as EventListener);
   }
 
   public subscribe(_topic: Frame): void {
@@ -113,35 +124,35 @@ export class SocketBase extends EventEmitter {
     throw new Error("not supported");
   }
 
-  private bindAttachEndpoint(endpoint: Endpoint): void {
-    endpoint.on("terminated", this.bindEndpointTerminated);
-    endpoint.on("message", this.xrecv);
+  private bindAttachEndpoint(event: CustomEvent<Endpoint>): void {
+    event.detail.on("terminated", this.bindEndpointTerminated);
+    event.detail.on("message", this.xrecv);
 
-    this.attachEndpoint(endpoint);
+    this.attachEndpoint(event);
   }
 
-  private bindEndpointTerminated(endpoint: Endpoint): void {
-    endpoint.removeListener("terminated", this.bindEndpointTerminated);
-    endpoint.removeListener("message", this.xrecv);
+  private bindEndpointTerminated(event: CustomEvent<Endpoint>): void {
+    event.detail.removeListener("terminated", this.bindEndpointTerminated);
+    event.detail.removeListener("message", this.xrecv);
 
-    this.endpointTerminated(endpoint);
+    this.endpointTerminated(event);
   }
 
-  protected attachEndpoint(_endpoint: Endpoint): void {}
+  protected attachEndpoint(_event: CustomEvent<Endpoint>): void {}
 
-  protected endpointTerminated(_endpoint: Endpoint): void {}
+  protected endpointTerminated(_event: CustomEvent<Endpoint>): void {}
 
-  protected hiccuped(_endpoint: Endpoint): void {}
+  protected hiccuped(_event: CustomEvent<Endpoint>): void {}
 
-  protected xrecv(_endpoint: Endpoint, ..._frames: Buffer[]): void {}
+  protected xrecv(_event: CustomEvent<[Endpoint, ...Uint8Array[]]>): void {}
 
   protected xsend(_msg: Msg): void {}
 
   public send(msg: Msg | Frame): void {
-    if (Array.isArray(msg)) {
-      this.xsend(msg);
-    } else {
-      this.xsend([msg]);
-    }
+    const encoder = new TextEncoder();
+    const messages = (Array.isArray(msg) ? msg : [msg])
+      .map((m) => !isFrameUint8Array(m) ? encoder.encode(m.toString()) : m);
+
+    this.xsend(messages);
   }
 }

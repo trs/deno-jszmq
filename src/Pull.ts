@@ -1,8 +1,9 @@
 import { SocketBase } from "./SocketBase.ts";
-import { Buffer, Endpoint } from "./Types.ts";
+import { Endpoint } from "./Types.ts";
 
 export class Pull extends SocketBase {
-  protected xrecv(endpoint: Endpoint, ...frames: Buffer[]): void {
+  protected xrecv(event: CustomEvent<[Endpoint, ...Uint8Array[]]>): void {
+    const [endpoint, ...frames] = event.detail;
     this.emit("message", endpoint, ...frames);
   }
 }
