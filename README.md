@@ -1,6 +1,6 @@
-# deno-jszmq
+# zmq
 
-**deno-jszmq** is a port of [jszmq](https://github.com/zeromq/jszmq) to
+**zmq** is a fork of [deno-jszmq](https://deno.land/x/jszmq) which is a port of [jszmq](https://github.com/zeromq/jszmq) to
 TypeScript and Deno, whereas jszmq is port of zeromq to Javascript, supporting
 both browsers and Deno. The library only support the WebSocket transport
 ([ZWS 2.0](https://rfc.zeromq.org/spec:45/ZWS/)).
@@ -26,14 +26,14 @@ it.
 Directly importing it:
 
 ```typescript
-import * as zmq from "https://deno.land/x/jszmq/mod.ts";
+import * as zmq from "https://deno.land/x/zmq/mod.ts";
 ```
 
 Or as `import-map.json`:
 
 ```json
 "imports": {
-  "jszmq": "https://deno.land/x/jszmq/mod.ts",
+  "zmq": "https://deno.land/x/zmq/mod.ts",
 }
 ```
 
@@ -58,10 +58,10 @@ Following socket types are currently supported:
 
 ## How to use
 
-Import jszmq with one of the following:
+Import zmq with one of the following:
 
 ```typescript
-import * as zmq from "https://deno.land/x/jszmq/mod.ts";
+import * as zmq from "https://deno.land/x/zmq/mod.ts";
 ```
 
 ### Creating a socket
@@ -86,7 +86,7 @@ const dealer = socket("dealer");
 To bind call the `bind` function:
 
 ```typescript
-import { DenoHttpServer, Router } from "jszmq";
+import { DenoHttpServer, Router } from "zmq";
 
 const router = new Router();
 router.bind(new DenoHttpServer("ws://localhost:80"));
@@ -95,7 +95,7 @@ router.bind(new DenoHttpServer("ws://localhost:80"));
 You can also provide an http server and bind multiple sockets on the same port:
 
 ```typescript
-import { DenoHttpServer, Pub, Rep } from "jszmq";
+import { DenoHttpServer, Pub, Rep } from "zmq";
 
 const server = new DenoHttpServer("ws://localhost:80");
 
@@ -150,7 +150,7 @@ how a worker pulls information from the socket.
 
 ```typescript
 // producer.ts
-import { DenoHttpServer, Push } from "jszmq";
+import { DenoHttpServer, Push } from "zmq";
 const server = new DenoHttpServer("ws://localhost:80");
 const sock = new Push();
 
@@ -166,7 +166,7 @@ setInterval(function () {
 
 ```typescript
 // worker.ts
-import { Pull } from "jszmq";
+import { Pull } from "zmq";
 const sock = new Pull();
 
 sock.connect("ws://localhost:80");
@@ -179,14 +179,14 @@ sock.on("message", function (endpoint, msg) {
 
 ### Pub/Sub
 
-This example demonstrates using `jszmq` in a classic Pub/Sub,
+This example demonstrates using `zmq` in a classic Pub/Sub,
 Publisher/Subscriber, application.
 
 **Publisher: pubber.js**
 
 ```typescript
 // pubber.ts
-import { DenoHttpServer, Pub } from "jszmq";
+import { DenoHttpServer, Pub } from "zmq";
 const server = new DenoHttpServer("ws://localhost:80");
 const sock = new Pub();
 
@@ -203,7 +203,7 @@ setInterval(function () {
 
 ```typescript
 // subber.ts
-import { Sub } from "jszmq";
+import { Sub } from "zmq";
 
 const sock = new Sub();
 sock.connect("ws://localhost:80");
