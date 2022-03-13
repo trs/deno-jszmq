@@ -1,13 +1,13 @@
 import { Router } from "./Router.ts";
-import { Buffer, Endpoint, Msg } from "./Types.ts";
+import { Endpoint, Msg } from "./Types.ts";
 
-type PendingMsg = [Endpoint, Buffer[]];
+type PendingMsg = [Endpoint, Uint8Array[]];
 
 export class Rep extends Router {
-  private static bottom = Buffer.alloc(0);
+  private static bottom = new Uint8Array(0);
 
   #sendingReply: boolean;
-  #ids: Buffer[];
+  #ids: Uint8Array[];
   #pending: PendingMsg[];
 
   public constructor() {
@@ -37,7 +37,7 @@ export class Rep extends Router {
     }
   }
 
-  private recvInternal(endpoint: Endpoint, frames: Buffer[]): void {
+  private recvInternal(endpoint: Endpoint, frames: Uint8Array[]): void {
     for (;;) {
       const frame = frames.shift();
 
@@ -64,7 +64,7 @@ export class Rep extends Router {
     }
   }
 
-  protected xxrecv(endpoint: Endpoint, ...frames: Buffer[]): void {
+  protected xxrecv(endpoint: Endpoint, ...frames: Uint8Array[]): void {
     // If we are in middle of sending a reply, we cannot receive next request yet, add to pending
     if (this.#sendingReply) {
       this.#pending.push([endpoint, frames]);

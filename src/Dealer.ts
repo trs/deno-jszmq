@@ -1,13 +1,13 @@
 import { SocketBase } from "./SocketBase.ts";
 import { LoadBalancer } from "./utils/LoadBalancer.ts";
-import { Buffer, Endpoint, Msg } from "./Types.ts";
+import { Endpoint, Msg } from "./Types.ts";
 
 export class Dealer extends SocketBase {
   #loadBalancer = new LoadBalancer();
   #pending: Msg[] = [];
 
-  protected attachEndpoint(endpoint: Endpoint): void {
-    this.#loadBalancer.attach(endpoint);
+  protected attachEndpoint(event: CustomEvent<Endpoint>): void {
+    this.#loadBalancer.attach(event.detail);
 
     for (;;) {
       const msg = this.#pending.shift();
@@ -21,11 +21,12 @@ export class Dealer extends SocketBase {
     }
   }
 
-  protected endpointTerminated(endpoint: Endpoint): void {
-    this.#loadBalancer.terminated(endpoint);
+  protected endpointTerminated(event: CustomEvent<Endpoint>): void {
+    this.#loadBalancer.terminated(event.detail);
   }
 
-  protected xrecv(endpoint: Endpoint, ...frames: Buffer[]): void {
+  protected xrecv(event: CustomEvent<[Endpoint, ...Uint8Array[]]>): void {
+    const [endpoint, ...frames] = event.detail;
     this.emit("message", endpoint, ...frames);
   }
 

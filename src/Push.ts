@@ -6,8 +6,8 @@ export class Push extends SocketBase {
   #loadBalancer = new LoadBalancer();
   #pending: Msg[] = [];
 
-  protected attachEndpoint(endpoint: Endpoint): void {
-    this.#loadBalancer.attach(endpoint);
+  protected attachEndpoint(event: CustomEvent<Endpoint>): void {
+    this.#loadBalancer.attach(event.detail);
 
     for (;;) {
       const msg = this.#pending.shift();
@@ -21,8 +21,8 @@ export class Push extends SocketBase {
     }
   }
 
-  protected endpointTerminated(endpoint: Endpoint): void {
-    this.#loadBalancer.terminated(endpoint);
+  protected endpointTerminated(event: CustomEvent<Endpoint>): void {
+    this.#loadBalancer.terminated(event.detail);
   }
 
   protected xsend(msg: Msg): void {

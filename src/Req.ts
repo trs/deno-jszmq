@@ -1,8 +1,8 @@
 import { Dealer } from "./Dealer.ts";
-import { Buffer, Endpoint, Msg } from "./Types.ts";
+import { Endpoint, Msg } from "./Types.ts";
 
 export class Req extends Dealer {
-  private static bottom = Buffer.alloc(0);
+  private static bottom = new Uint8Array(0);
 
   // If true, request was already sent and reply wasn't received yet or
   // was received partially.
@@ -26,11 +26,9 @@ export class Req extends Dealer {
     this.receivingReply = true;
   }
 
-  protected xrecv(
-    endpoint: Endpoint,
-    bottom: Buffer,
-    ...frames: Buffer[]
-  ): void {
+
+  protected xrecv(event: CustomEvent<[Endpoint, ...Uint8Array[]]>): void {
+    const [endpoint, bottom, ...frames] = event.detail;
     // If request wasn't send, we can't process reply, drop.
     if (!this.receivingReply) {
       return;
@@ -43,6 +41,6 @@ export class Req extends Dealer {
 
     this.receivingReply = false;
 
-    super.xrecv(endpoint, ...frames);
+    super.xrecv({detail: [endpoint, ...frames]} as CustomEvent);
   }
 }

@@ -1,29 +1,26 @@
 import { XSub } from "./Xsub.ts";
-import { Buffer, Frame, Msg } from "./Types.ts";
+import { Frame, Msg, frameToUint8Array } from "./Types.ts";
 
 export class Sub extends XSub {
   public subscribe(topic: Frame): void {
-    if (typeof topic === "string") {
-      const frame = Buffer.concat([Buffer.from([1]), Buffer.from(topic)]);
-      super.xsend([frame]);
-    } else if (Buffer.isBuffer(topic)) {
-      const frame = Buffer.concat([Buffer.from([1]), topic]);
-      super.xsend([frame]);
-    } else {
+    const topicTypedArray = frameToUint8Array(topic);
+    if (!topicTypedArray) {
       throw new Error("unsupported topic type");
     }
+
+    const frame = new Uint8Array([1, ...topicTypedArray]);
+    super.xsend([frame]);
   }
 
   public unsubscribe(topic: Frame): void {
-    if (typeof topic === "string") {
-      const frame = Buffer.concat([Buffer.from([0]), Buffer.from(topic)]);
-      super.xsend([frame]);
-    } else if (Buffer.isBuffer(topic)) {
-      const frame = Buffer.concat([Buffer.from([0]), topic]);
-      super.xsend([frame]);
-    } else {
+    const topicTypedArray = frameToUint8Array(topic);
+
+    if (!topicTypedArray) {
       throw new Error("unsupported topic type");
     }
+
+    const frame = new Uint8Array([0, ...topicTypedArray]);
+    super.xsend([frame]);
   }
 
   protected xsend(_msg: Msg): void {

@@ -1,5 +1,5 @@
 import { SocketBase } from "./SocketBase.ts";
-import { Buffer, Endpoint, Msg } from "./Types.ts";
+import { Endpoint, Msg, isFrameUint8Array } from "./Types.ts";
 import { MultiTrie } from "./utils/MultiTrie.ts";
 import { Distribution } from "./utils/Distribution.ts";
 
@@ -20,32 +20,32 @@ export class XPub extends SocketBase {
 
   protected sendUnsubscription(
     endpoint: Endpoint,
-    data: Buffer,
+    data: Uint8Array,
     size: number,
   ): void {
-    const unsubscription = Buffer.concat([
-      Buffer.from([0]),
-      data.slice(0, size),
+    const unsubscription = new Uint8Array([
+      0, ...data.slice(0, size)
     ]);
+
     endpoint.send([unsubscription]);
   }
 
-  protected attachEndpoint(endpoint: Endpoint): void {
-    this.#distribution.attach(endpoint);
+  protected attachEndpoint(event: CustomEvent<Endpoint>): void {
+    this.#distribution.attach(event.detail);
   }
 
-  protected endpointTerminated(endpoint: Endpoint): void {
-    this.#subscriptions.removeEndpoint(endpoint, this.sendUnsubscription);
-    this.#distribution.terminated(endpoint);
+  protected endpointTerminated(event: CustomEvent<Endpoint>): void {
+    this.#subscriptions.removeEndpoint(event.detail, this.sendUnsubscription);
+    this.#distribution.terminated(event.detail);
   }
 
   protected xsend(msg: Msg): void {
-    let topic: Buffer;
+    let topic: Uint8Array;
 
-    if (Buffer.isBuffer(msg[0])) {
+    if (isFrameUint8Array(msg[0])) {
       topic = msg[0];
     } else {
-      topic = Buffer.from(msg[0], "utf8");
+      topic = new TextEncoder().encode(msg[0]);
     }
 
     this.#subscriptions.match(topic, 0, topic.length, this.markAsMatching);
@@ -53,12 +53,12 @@ export class XPub extends SocketBase {
   }
 
   protected xrecv(
-    endpoint: Endpoint,
-    subscription: Buffer,
-    ...frames: Buffer[]
+    event: CustomEvent<[Endpoint, ...Uint8Array[]]>
   ): void {
+    const [endpoint, subscription, ...frames] = event.detail;
+
     if (subscription.length > 0) {
-      const type = subscription.readUInt8(0);
+      const type = subscription.at(0);
       if (type === 0 || type === 1) {
         let unique;
 
@@ -79,17 +79,18 @@ export class XPub extends SocketBase {
         }
 
         if (unique || this.options.xpubVerbose) {
-          this.xxrecv(endpoint, subscription, ...frames);
+          this.xxrecv({detail: [endpoint, subscription, ...frames]} as CustomEvent);
         }
 
         return;
       }
     }
 
-    this.xxrecv(endpoint, subscription, ...frames);
+    this.xxrecv({detail: [endpoint, subscription, ...frames]} as CustomEvent);
   }
 
-  protected xxrecv(endpoint: Endpoint, ...frames: Buffer[]): void {
+  protected xxrecv(event: CustomEvent<[Endpoint, ...Uint8Array[]]>): void {
+    const [endpoint, ...frames] = event.detail;
     this.emit("message", endpoint, ...frames);
   }
 }

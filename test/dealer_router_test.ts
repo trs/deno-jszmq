@@ -15,20 +15,21 @@ Deno.test({
     let complete = false;
     let timer: number | undefined;
     const httpServer = new DenoHttpServer(url);
+    const decoder = new TextDecoder();
 
     const router = new Router();
     router.bind(httpServer);
     router.addListener(
       "message",
       (_endpoint: Endpoint, routingId: Frame, message: Uint8Array) => {
-        assertStrictEquals(message.toString(), "hello");
+        assertStrictEquals(decoder.decode(message), "hello");
         router.send([routingId, "world"]);
       },
     );
 
     const dealer = new Dealer();
     dealer.addListener("message", (_endpoint: Endpoint, reply: Uint8Array) => {
-      assertStrictEquals(reply.toString(), "world");
+      assertStrictEquals(decoder.decode(reply), "world");
       complete = true;
       ensureCompleted();
     });

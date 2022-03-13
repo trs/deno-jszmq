@@ -1,5 +1,5 @@
 import { DenoHttpServer } from "../src/utils/DenoHttpServer.ts";
-import { Buffer, Rep, Req } from "../src/index.ts";
+import { Rep, Req } from "../mod.ts";
 
 import {
   assert,
@@ -14,17 +14,18 @@ Deno.test({
     let complete = false;
     let timer: number | undefined;
     const httpServer = new DenoHttpServer(url);
+    const decoder = new TextDecoder();
 
     const rep = new Rep();
     rep.bind(httpServer);
-    rep.addListener("message", (_endpoint: never, msg: Uint8Array) => {
-      assertStrictEquals(msg.toString(), "Hello");
+    rep.addListener("message", (_endpoint, msg: Uint8Array) => {
+      assertStrictEquals(decoder.decode(msg), "Hello");
       rep.send("World");
     });
 
     const req = new Req();
-    req.addListener("message", (_endpoint: never, message: Uint8Array) => {
-      assertStrictEquals(message.toString(), "World");
+    req.addListener("message", (_endpoint, message: Uint8Array) => {
+      assertStrictEquals(decoder.decode(message), "World");
       complete = true;
       ensureCompleted();
     });
@@ -56,6 +57,7 @@ Deno.test({
     let complete = false;
     let timer: number | undefined;
     const httpServer = new DenoHttpServer(url);
+    const decoder = new TextDecoder();
 
     const requests: Req[] = [];
     const lastReq = new Req();
@@ -64,13 +66,13 @@ Deno.test({
     reply.bind(httpServer);
     reply.addListener(
       "message",
-      (_endpoint: unknown, msg: Buffer) => reply.send(msg),
+      (_endpoint: unknown, msg: Uint8Array) => reply.send(msg),
     );
 
     lastReq.addListener(
       "message",
       (_endpoint: unknown, message: Uint8Array) => {
-        assertStrictEquals(message.toString(), "done");
+        assertStrictEquals(decoder.decode(message), "done");
         complete = true;
         ensureCompleted();
       },
@@ -100,7 +102,7 @@ Deno.test({
           "message",
           // deno-lint-ignore no-explicit-any
           (_endpoint: unknown, reply: any) => {
-            assertStrictEquals(reply.toString(), i.toString());
+            assertStrictEquals(decoder.decode(reply), i.toString());
             if (i == maxReq - 1) {
               lastReq.send("done");
             }

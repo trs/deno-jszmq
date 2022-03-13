@@ -1,8 +1,7 @@
 import { assert } from "https://deno.land/std@0.108.0/testing/asserts.ts";
-import { Buffer } from "../Types.ts";
 import { resize } from "./array.ts";
 
-type ForeachCallback = (buffer: Buffer) => void;
+type ForeachCallback = (buffer: Uint8Array) => void;
 
 export class Trie {
   #referenceCount: number;
@@ -23,14 +22,14 @@ export class Trie {
     return this.#referenceCount === 0 && this.#liveNodes === 0;
   }
 
-  public add(prefix: Buffer, start: number, size: number): boolean {
+  public add(prefix: Uint8Array, start: number, size: number): boolean {
     // We are at the node corresponding to the prefix. We are done.
     if (size === 0) {
       this.#referenceCount++;
       return this.#referenceCount === 1;
     }
 
-    const currentCharacter = prefix.readUInt8(start);
+    const currentCharacter = prefix.at(start)!;
     if (
       currentCharacter < this.#minCharacter ||
       currentCharacter >= this.#minCharacter + this.#count
@@ -80,7 +79,7 @@ export class Trie {
     );
   }
 
-  public remove(prefix: Buffer, start: number, size: number): boolean {
+  public remove(prefix: Uint8Array, start: number, size: number): boolean {
     if (size === 0) {
       if (this.#referenceCount === 0) {
         return false;
@@ -89,7 +88,7 @@ export class Trie {
       return this.#referenceCount === 0;
     }
 
-    const currentCharacter = prefix.readUInt8(start);
+    const currentCharacter = prefix.at(start)!;
     if (
       this.#count === 0 ||
       currentCharacter < this.#minCharacter ||
@@ -160,7 +159,7 @@ export class Trie {
   }
 
   public check(
-    data: Buffer,
+    data: Uint8Array,
     offset: number,
     size: number,
   ): boolean | undefined {
@@ -182,7 +181,7 @@ export class Trie {
 
       // If there's no corresponding slot for the first character
       // of the prefix, the message does not match.
-      const character = data.readUInt8(start);
+      const character = data.at(start)!;
       if (
         character < current.#minCharacter ||
         character >= current.#minCharacter + current.#count
@@ -207,11 +206,11 @@ export class Trie {
 
   // Apply the function supplied to each subscription in the trie.
   public forEach(func: ForeachCallback): void {
-    this.forEachHelper(Buffer.alloc(0), 0, 0, func);
+    this.forEachHelper(new Uint8Array(0), 0, 0, func);
   }
 
   public forEachHelper(
-    buffer: Buffer,
+    buffer: Uint8Array,
     bufferSize: number,
     maxBufferSize: number,
     func: ForeachCallback,
@@ -224,8 +223,8 @@ export class Trie {
     // Adjust the buffer.
     if (bufferSize >= maxBufferSize) {
       maxBufferSize = bufferSize + 256;
-      const newBuffer = Buffer.alloc(maxBufferSize, 0);
-      buffer.copy(newBuffer);
+      const newBuffer = new Uint8Array(maxBufferSize);
+      newBuffer.set(buffer);
       buffer = newBuffer;
     }
 
@@ -250,7 +249,9 @@ export class Trie {
 
     // If there are multiple subnodes.
     for (let c = 0; c !== this.#count; c++) {
-      buffer.writeUInt8(this.#minCharacter + c, bufferSize);
+
+      buffer.set(new Uint8Array(new Int32Array([this.#minCharacter + c]).buffer), bufferSize)
+
       if (this.#next[c] != null) {
         this.#next[c]?.forEachHelper(
           buffer,

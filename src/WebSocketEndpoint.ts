@@ -1,6 +1,5 @@
-import { EventEmitter } from "https://deno.land/std@0.108.0/node/events.ts";
 import { SocketOptions } from "./SocketOptions.ts";
-import { Buffer, Endpoint, Msg } from "./Types.ts";
+import { Endpoint, Msg } from "./Types.ts";
 
 enum State {
   Closed,
@@ -10,16 +9,17 @@ enum State {
 }
 
 export class WebSocketEndpoint<Data extends Record<string, unknown>>
-  extends EventEmitter
-  implements Endpoint<Data> {
+  implements Endpoint<Data>
+{
+  #eventTarget = new EventTarget();
   #socket!: WebSocket;
   #state: State;
-  #frames: Buffer[] = [];
-  #queue: Buffer[] = [];
+  #frames: Uint8Array[] = [];
+  #queue: Uint8Array[] = [];
   #options: SocketOptions;
   #routingIdReceived = false;
   #accepted: boolean;
-  public routingKey: Buffer = Buffer.alloc(0);
+  public routingKey: Uint8Array = new Uint8Array(0);
   public routingKeyString = "";
   public readonly address: string;
   public readonly data?: Data;
@@ -29,7 +29,6 @@ export class WebSocketEndpoint<Data extends Record<string, unknown>>
     options: SocketOptions,
     data: Data,
   ) {
-    super();
     this.#options = options;
     this.data = data;
     this.connect = this.connect.bind(this);
@@ -75,23 +74,23 @@ export class WebSocketEndpoint<Data extends Record<string, unknown>>
     this.#queue = [];
 
     if (this.#options.immediate) {
-      this.emit("attach", this);
+      this.#eventTarget.dispatchEvent(new CustomEvent("attach", {detail: this}));
     } else if (oldState === State.Reconnecting) {
-      this.emit("hiccuped", this);
+      this.#eventTarget.dispatchEvent(new CustomEvent("hiccuped", {detail: this}));
     }
   }
 
   private onClose(): void {
     if (this.#accepted) {
       this.#state = State.Closed;
-      this.emit("terminated", this);
+      this.#eventTarget.dispatchEvent(new CustomEvent("terminated", {detail: this}));
     } else if (this.#state !== State.Closed) {
       if (
         (this.#state === State.Active ||
           this.#state === State.Connecting) &&
         this.#options.immediate
       ) {
-        this.emit("terminated", this);
+        this.#eventTarget.dispatchEvent(new CustomEvent("terminated", {detail: this}));
       }
 
       if (this.#state === State.Active) {
@@ -106,8 +105,7 @@ export class WebSocketEndpoint<Data extends Record<string, unknown>>
     this.#socket.close();
   }
 
-  // deno-lint-ignore no-explicit-any
-  private onMessage(message: ArrayBuffer | any): void {
+  private onMessage(message: {data: unknown}): void {
     if (!this.#routingIdReceived) {
       this.#routingIdReceived = true;
 
@@ -116,17 +114,19 @@ export class WebSocketEndpoint<Data extends Record<string, unknown>>
       }
     }
 
-    if (message.data instanceof ArrayBuffer) {
-      const buffer = Buffer.from(message.data);
+    if (message.data instanceof Uint8Array || message.data instanceof ArrayBuffer) {
+      const buffer = new Uint8Array(message.data);
 
       if (buffer.length > 0) {
-        const more = buffer.readUInt8(0) === 1;
+        const more = buffer.at(0) === 1;
         const msg = buffer.slice(1);
 
         this.#frames.push(msg);
 
         if (!more) {
-          this.emit("message", this, ...this.#frames);
+          this.#eventTarget.dispatchEvent(new CustomEvent("message", {
+            detail: [this, ...this.#frames]
+          }));
           this.#frames = [];
         }
       } else {
@@ -135,6 +135,19 @@ export class WebSocketEndpoint<Data extends Record<string, unknown>>
     } else {
       this.error();
     }
+  }
+
+  public removeListener(
+    event: string,
+    listener: EventListenerOrEventListenerObject | null,
+  ) {
+    this.#eventTarget.removeEventListener(event, listener);
+    return this;
+  }
+
+  public on(event: string, listener: EventListenerOrEventListenerObject) {
+    this.#eventTarget.addEventListener(event, listener);
+    return this;
   }
 
   public close(): void {
@@ -148,7 +161,7 @@ export class WebSocketEndpoint<Data extends Record<string, unknown>>
         this.#socket.close();
       }
 
-      this.emit("terminated", this);
+      this.#eventTarget.dispatchEvent(new CustomEvent("terminated", {detail: this}));
     }
   }
 
@@ -164,19 +177,17 @@ export class WebSocketEndpoint<Data extends Record<string, unknown>>
       let frame = msg[i];
 
       if (typeof frame === "string") {
-        frame = Buffer.from(frame, "utf8");
+        frame = new TextEncoder().encode(frame);
       } else if (
         frame instanceof ArrayBuffer ||
-        frame instanceof Buffer
+        frame instanceof Uint8Array
       ) {
         // Nothing to do, use as is
       } else {
         throw new Error("invalid message type");
       }
 
-      const flagsArray = Buffer.alloc(1);
-      flagsArray.writeUInt8(flags, 0);
-      const buffer = Buffer.concat([flagsArray, frame]);
+      const buffer = new Uint8Array([flags, ...frame]);
 
       if (this.#state === State.Active) {
         this.#socket.send(buffer);
